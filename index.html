@@ -3,12 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>TÜRKİYE CUMHURİYETİ BURAK KOÇ IRIG-A SAATİ</title>
 
 <!-- FAVICON -->
 <link rel="icon" type="image/jpeg" href="logo.jpeg">
-
+  
 <style>
   body {
     background-color: white;
@@ -42,6 +41,7 @@
   .flag-video {
     height: 120px;
     width: auto;
+    border-radius: 0;
   }
 
   .time-container {
@@ -59,7 +59,7 @@
   }
 
   .date {
-    font-size: 4em;
+    font-size: 4em; /* Tarih büyük */
     margin-top: 10px;
     letter-spacing: 2px;
   }
@@ -105,7 +105,7 @@
   @media screen and (max-width: 900px) {
     .logo, .flag-video { height: 60px; }
     .time { font-size: 6em; }
-    .date { font-size: 3em; }
+    .date { font-size: 3em; } /* Mobilde biraz küçültüldü */
     .info { font-size: 1em; }
     @media (orientation: portrait) {
       .rotate-warning { display: block; }
@@ -113,10 +113,9 @@
   }
 </style>
 </head>
-
 <body>
 
-<div class="rotate-warning">
+<div class="rotate-warning" id="rotateWarning">
   Lütfen cihazınızı yatay hale getiriniz.
 </div>
 
@@ -124,6 +123,7 @@
   <img src="UYDU .png" alt="Logo" class="logo">
   <video class="flag-video" autoplay muted loop playsinline>
     <source src="turkbayragi.mp4" type="video/mp4">
+    Tarayıcınız video etiketini desteklemiyor.
   </video>
 </div>
 
@@ -134,110 +134,128 @@
 
 <div class="info">
   SES TONUNDA SAAT BİLGİSİ İLETİLMEKTEDİR. RECEIVER SES ÇIKIŞI IRIG-A UYUMLU SAATLERE
-  VE CİHAZLARA BAĞLANDIĞINDA, SAAT BİLGİSİ OTOMATİK OLARAK GÜNCELLEMEKTEDİR.
-  BİLGİLENDİRME AMAÇLIDIR.
+  VE CİHAZLARA BAĞLANDIĞINDA, SAAT BİLGİSİ OTOMATİK OLARAK GÜNCELLEMEKTEDİR. BİLGİLENDİRME AMAÇLIDIR.
 </div>
 
-<div class="clickmsg" id="clickmsg">
-  Lütfen IRIG-A ses saatini ve tam ekranı başlatmak için çift tıklayın.
-</div>
+<div class="clickmsg" id="clickmsg">Lütfen IRIG-A ses saatini ve tam ekranı başlatmak için çift tıklayın.</div>
 
 <script>
-function updateTime() {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2,'0');
-  const m = String(now.getMinutes()).padStart(2,'0');
-  const s = String(now.getSeconds()).padStart(2,'0');
-  document.getElementById("time").textContent = `${h}:${m}:${s}`;
+  /* === EKRAN SAATİ VE TARİH === */
+  function updateTime() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    const s = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById("time").textContent = `${h}:${m}:${s}`;
 
-  const d = String(now.getDate()).padStart(2,'0');
-  const mo = String(now.getMonth()+1).padStart(2,'0');
-  const y = now.getFullYear();
-  document.getElementById("date").textContent = `${d}.${mo}.${y}`;
-}
-setInterval(updateTime, 1000);
-updateTime();
-
-/* IRIG-A SES MOTORU */
-(() => {
-  let ctx, osc, gain, run=false, nextFrameTime=0;
-  const SLOT_MS = 10;
-  const ON_MS = {"0":5, "1":10};
-
-  function init() {
-    if(ctx) return;
-    ctx = new (window.AudioContext||window.webkitAudioContext)();
-    osc = ctx.createOscillator();
-    gain = ctx.createGain();
-    osc.type = "square";
-    osc.frequency.value = 1000;
-    gain.gain.value = 0;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    nextFrameTime = ctx.currentTime + 0.05;
+    const d = String(now.getDate()).padStart(2,'0');
+    const mo = String(now.getMonth()+1).padStart(2,'0');
+    const y = now.getFullYear();
+    document.getElementById("date").textContent = `${d}.${mo}.${y}`;
   }
+  setInterval(updateTime, 1000);
+  updateTime();
 
-  function onLen(b){ return (ON_MS[b]||5)/1000; }
+  /* === IRIG-A SES MOTORU === */
+  (() => {
+    let ctx, osc, gain, run=false, nextFrameTime=0;
+    const SLOT_MS = 10; 
+    const ON_MS = {"0":5, "1":10}; 
 
-  function makeFrame(d){
-    const f = Array(100).fill("0");
-    const s = d.getUTCSeconds(), m=d.getUTCMinutes(), h=d.getUTCHours();
-    const bcd=(v,n)=>Array.from({length:n},(_,i)=>(v>>i)&1?"1":"0");
-    const w=(i,a)=>a.forEach((v,k)=>f[i+k]=v);
-    w(0,bcd(s%10,4)); w(4,bcd(Math.floor(s/10),3));
-    w(10,bcd(m%10,4)); w(14,bcd(Math.floor(m/10),3));
-    w(20,bcd(h%10,4)); w(24,bcd(Math.floor(h/10),2));
-    return f;
-  }
-
-  function scheduleFrame(frame,start){
-    const g=gain.gain;
-    frame.forEach((b,i)=>{
-      const t0=start+i*SLOT_MS/1000;
-      const t1=t0+onLen(b);
-      g.setValueAtTime(0,t0);
-      g.linearRampToValueAtTime(0.9,t0+0.0005);
-      g.setValueAtTime(0.9,t1);
-      g.linearRampToValueAtTime(0,t1+0.0005);
-    });
-  }
-
-  function loop(){
-    if(!run) return;
-    const now=ctx.currentTime;
-    while(nextFrameTime<now+1.2){
-      const date=new Date(Date.now()+(nextFrameTime-ctx.currentTime)*1000);
-      scheduleFrame(makeFrame(date),nextFrameTime);
-      nextFrameTime+=1;
+    function init() {
+      if(ctx) return;
+      ctx = new (window.AudioContext||window.webkitAudioContext)();
+      osc = ctx.createOscillator();
+      gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 1000;
+      gain.gain.value = 0;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      nextFrameTime = ctx.currentTime + 0.05;
     }
-    requestAnimationFrame(loop);
-  }
 
-  function start(){
-    if(run) return;
-    init(); run=true;
-    document.getElementById("clickmsg").style.display="none";
-    loop();
-  }
+    function onLen(b) { return (ON_MS[b]||5)/1000; }
 
-  function stop(){
-    run=false;
-    try{osc.stop()}catch{}
-    try{ctx.close()}catch{}
-    ctx=osc=gain=null;
-  }
+    function makeFrame(d){
+      const f = Array(100).fill("0");
+      const s = d.getUTCSeconds(), m=d.getUTCMinutes(), h=d.getUTCHours();
 
-  function requestFullscreen(){
-    const el=document.documentElement;
-    el.requestFullscreen?.()||el.webkitRequestFullscreen?.();
-  }
+      function bcd(v,n){ return Array.from({length:n},(_,i)=>(v>>i)&1?"1":"0"); }
 
-  document.addEventListener("dblclick",()=>{
-    requestFullscreen();
-    run?stop():start();
-  });
-})();
+      function w(i,a){ a.forEach((v,k)=>{f[i+k]=v;}); }
+
+      w(0,bcd(s%10,4)); w(4,bcd(Math.floor(s/10),3));
+      w(10,bcd(m%10,4)); w(14,bcd(Math.floor(m/10),3));
+      w(20,bcd(h%10,4)); w(24,bcd(Math.floor(h/10),2));
+
+      return f;
+    }
+
+    function scheduleFrame(frame,start){
+      const g=gain.gain;
+      frame.forEach((b,i)=>{
+        const t0 = start + i*SLOT_MS/1000;
+        const t1 = t0 + onLen(b);
+        g.setValueAtTime(0,t0);
+        g.linearRampToValueAtTime(0.9,t0+0.0005);
+        g.setValueAtTime(0.9,t1);
+        g.linearRampToValueAtTime(0,t1+0.0005);
+      });
+    }
+
+    function loop(){
+      if(!run) return;
+      const now = ctx.currentTime;
+      while(nextFrameTime < now + 1.2){
+        const date = new Date(Date.now() + (nextFrameTime - ctx.currentTime)*1000);
+        const frame = makeFrame(date);
+        scheduleFrame(frame, nextFrameTime);
+        nextFrameTime += 1.0;
+      }
+      requestAnimationFrame(loop);
+    }
+
+    function start(){
+      if(run) return;
+      init(); run=true;
+      document.getElementById("clickmsg").style.display="none";
+      loop();
+      console.log("IRIG-A SES BAŞLADI (KESİNTİSİZ)");
+    }
+
+    function stop(){
+      run=false;
+      try{osc.stop()}catch{}
+      try{ctx.close()}catch{}
+      ctx=osc=gain=null;
+    }
+
+    function requestFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) el.msRequestFullscreen();
+    }
+
+    function startStopAudio() {
+      if (window.innerWidth < window.innerHeight) {
+        alert("Lütfen cihazı yatay hale getiriniz.");
+        return;
+      }
+      requestFullscreen();
+      if (!run) start();
+      else stop();
+    }
+
+    document.addEventListener("click", startStopAudio);
+    document.addEventListener("touchstart", startStopAudio);
+    document.addEventListener("keydown", e => {
+      if(e.code==="Space"){ e.preventDefault(); run?stop():start(); }
+    });
+    document.addEventListener("dblclick",()=>{run?stop():start();});
+  })();
 </script>
 
 </body>
